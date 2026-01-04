@@ -10,9 +10,10 @@ interface ToolbarProps {
   isCompiling: boolean
   isDeploying: boolean
   isConnected: boolean
+  isCompiled?: boolean
 }
 
-export function Toolbar({ onCompile, onDeploy, onClearConsole, isCompiling, isDeploying, isConnected }: ToolbarProps) {
+export function Toolbar({ onCompile, onDeploy, onClearConsole, isCompiling, isDeploying, isConnected, isCompiled }: ToolbarProps) {
   return (
     <div className="border-b border-border bg-card">
       <div className="flex items-center gap-2 px-6 py-2">
@@ -23,7 +24,8 @@ export function Toolbar({ onCompile, onDeploy, onClearConsole, isCompiling, isDe
 
         <Button
           onClick={onDeploy}
-          disabled={isDeploying || !isConnected}
+          disabled={isDeploying || !isConnected || !isCompiled}
+          title={!isCompiled ? 'Compile the project before deploying' : undefined}
           variant="secondary"
           size="sm"
           className="gap-2"

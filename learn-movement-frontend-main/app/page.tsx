@@ -12,7 +12,8 @@ import { compileCode, fetchUserTimezone } from "@/lib/api"
 import { decodeBase64ToUint8Array } from "@/lib/encoding"
 
 export default function Home() {
-  const { address, connected, disconnect, signAndSubmitTransaction } = useWallet()
+  const wallet = useWallet()
+  const { address, connected, disconnect, signAndSubmitTransaction } = wallet
 
   const [code, setCode] = useState(`module hello::message {
     use std::string;
@@ -47,6 +48,7 @@ export default function Home() {
 
   const [isCompiling, setIsCompiling] = useState(false)
   const [isDeploying, setIsDeploying] = useState(false)
+  const [isCompiled, setIsCompiled] = useState(false)
   const [lastCompileResult, setLastCompileResult] = useState<any | null>(null)
   const [userTimezone, setUserTimezone] = useState<string>("")
 
@@ -86,6 +88,7 @@ export default function Home() {
       // Handle structured backend responses per docs
       if (res?.type === 'compile_success' && res.success) {
         setLastCompileResult(res)
+        setIsCompiled(true)
         setConsoleOutput((prev) => [
           ...prev,
           {
@@ -102,6 +105,7 @@ export default function Home() {
         ])
       } else if (res?.type === 'compile_failed') {
         setLastCompileResult(res)
+        setIsCompiled(false)
         // Add compile failed header
         setConsoleOutput((prev) => [
           ...prev,
@@ -124,6 +128,7 @@ export default function Home() {
         setConsoleOutput((prev) => [...prev, ...errorLogs])
       } else {
         setLastCompileResult(res)
+        setIsCompiled(false)
         setConsoleOutput((prev) => [
           ...prev,
           {
@@ -142,13 +147,13 @@ export default function Home() {
           timestamp: new Date(),
         },
       ])
-    } finally {
+      } finally {
       setIsCompiling(false)
     }
   }
 
   const handleDeploy = async () => {
-    if (!isConnected) {
+      if (!isConnected) {
       setConsoleOutput((prev) => [
         ...prev,
         {
@@ -197,6 +202,13 @@ export default function Home() {
       ])
 
       // Build and submit the transaction using the wallet adapter
+
+      // Log wallet/provider info to aid debugging (may be undefined for some adapters)
+      // eslint-disable-next-line no-console
+      console.log('wallet object before deploy:', wallet)
+      // eslint-disable-next-line no-console
+      console.log('wallet.provider (if present):', (wallet as any)?.provider)
+
       const response = await signAndSubmitTransaction({
         payload: {
           function: "0x1::code::publish_package_txn" as const,
@@ -205,15 +217,32 @@ export default function Home() {
         },
       })
 
-      // Extract transaction hash from response
-      const txHash = (response as any)?.hash || (response as any)?.args?.hash || JSON.stringify(response)
-
+      // DEBUG: log full response to help diagnose reject reasons
+      // (This will also appear in the in-app console for easier inspection.)
+      // eslint-disable-next-line no-console
+      console.log('signAndSubmitTransaction response:', response)
       setConsoleOutput((prev) => [
         ...prev,
-        { type: 'success', message: `Module deployed successfully!`, timestamp: new Date() },
-        { type: 'info', message: `Transaction hash: ${txHash}`, timestamp: new Date() },
-        { type: 'info', message: `View on explorer: https://explorer.movementnetwork.xyz/txn/${txHash}?network=testnet`, timestamp: new Date() }
+        { type: 'info', message: 'Raw deploy response:', timestamp: new Date(), data: response },
       ])
+
+      // Extract transaction hash or status info from response
+      const txHash = (response as any)?.hash || (response as any)?.args?.hash || (response as any)?.tx_hash || JSON.stringify(response)
+
+      // If the wallet returned a rejection object, show a clearer message
+      if ((response as any)?.status === 'Rejected' || (response as any)?.status === 'rejected') {
+        setConsoleOutput((prev) => [
+          ...prev,
+          { type: 'error', message: `Transaction rejected by provider: ${JSON.stringify(response)}`, timestamp: new Date() },
+        ])
+      } else {
+        setConsoleOutput((prev) => [
+          ...prev,
+          { type: 'success', message: `Module deployed successfully!`, timestamp: new Date() },
+          { type: 'info', message: `Transaction hash: ${txHash}`, timestamp: new Date() },
+          { type: 'info', message: `View on explorer: https://explorer.movementnetwork.xyz/txn/${txHash}?network=testnet`, timestamp: new Date() }
+        ])
+      }
     } catch (err: any) {
       setConsoleOutput((prev) => [
         ...prev,
@@ -257,13 +286,14 @@ export default function Home() {
 
 
       <Toolbar
-        onCompile={handleCompile}
-        onDeploy={handleDeploy}
-        onClearConsole={handleClearConsole}
-        isCompiling={isCompiling}
-        isDeploying={isDeploying}
-        isConnected={isConnected}
-      />
+          onCompile={handleCompile}
+          onDeploy={handleDeploy}
+          onClearConsole={handleClearConsole}
+          isCompiling={isCompiling}
+          isDeploying={isDeploying}
+          isConnected={isConnected}
+          isCompiled={isCompiled}
+        />
 
       <div className="flex flex-1 overflow-hidden">
         <PanelGroup direction="horizontal">
