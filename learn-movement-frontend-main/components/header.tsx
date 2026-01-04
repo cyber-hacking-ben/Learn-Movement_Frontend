@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Wallet } from "lucide-react"
 
+
 interface HeaderProps {
   isConnected: boolean
   onConnectWallet: () => void
