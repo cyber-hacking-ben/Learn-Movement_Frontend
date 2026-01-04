@@ -42,8 +42,8 @@ export function Header({ isConnected, onDisconnect, walletAddress }: HeaderProps
           <div
             className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs border ${
               isConnected
-                ? "bg-secondary text-foreground border-border"
-                : "bg-card text-muted-foreground border-border"
+                ? "bg-secondary text-white border-border"
+                : "bg-card text-white border-border"
             }`}
           >
             {isConnected ? (
@@ -75,7 +75,9 @@ export function Header({ isConnected, onDisconnect, walletAddress }: HeaderProps
               Disconnect
             </Button>
           ) : (
+            <div className="flex items-center justify-center bg-yellow-400 rounded-full w-50 h-8">
             <ConnectButton />
+            </div>
           )}
         </div>
       </div>
