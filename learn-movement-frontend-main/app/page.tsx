@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import React from "react"
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels"
+import { useWallet, ConnectButton } from "@razorlabs/razorkit"
 import { CodeEditor } from "@/components/code-editor"
 import { Console } from "@/components/console"
 import { Toolbar } from "@/components/toolbar"
@@ -11,6 +12,8 @@ import { compileCode, fetchUserTimezone } from "@/lib/api"
 import { decodeBase64ToUint8Array } from "@/lib/encoding"
 
 export default function Home() {
+  const { address, connected, disconnect, signAndSubmitTransaction } = useWallet()
+
   const [code, setCode] = useState(`module hello::message {
     use std::string;
     use std::signer;
@@ -44,13 +47,14 @@ export default function Home() {
 
   const [isCompiling, setIsCompiling] = useState(false)
   const [isDeploying, setIsDeploying] = useState(false)
-  const [isConnected, setIsConnected] = useState(false)
-  const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [lastCompileResult, setLastCompileResult] = useState<any | null>(null)
   const [userTimezone, setUserTimezone] = useState<string>("")
 
+  const walletAddress = address ?? null
+  const isConnected = connected
+
   // Fetch timezone on mount
-  React.useEffect(() => {
+  useEffect(() => {
     fetchUserTimezone().then(tz => setUserTimezone(tz))
   }, [])
 
@@ -181,31 +185,34 @@ export default function Home() {
     try {
       // prepare module bytecodes
       const modules = lastCompileResult.modules ?? []
-      const moduleBytecodes = modules.map((m: any) => decodeBase64ToUint8Array(m.bytecode_base64))
+      const moduleBytecodes = modules.map((m: any) => Array.from(decodeBase64ToUint8Array(m.bytecode_base64)))
 
       const metadataBytes = lastCompileResult.package_metadata_bcs
-        ? decodeBase64ToUint8Array(lastCompileResult.package_metadata_bcs)
-        : new Uint8Array()
+        ? Array.from(decodeBase64ToUint8Array(lastCompileResult.package_metadata_bcs))
+        : []
 
-      // Build payload according to docs
-      const payload = {
-        type: "entry_function_payload",
-        function: "0x1::code::publish_package_txn",
-        type_arguments: [],
-        arguments: [metadataBytes, moduleBytecodes],
-      }
-
-      // TODO: integrate real Wallet Adapter signing here. For now prompt to simulate.
       setConsoleOutput((prev) => [
         ...prev,
-        { type: 'info', message: 'Prepared publish payload. Prompting to simulate submission...', timestamp: new Date() }
+        { type: 'info', message: 'Preparing transaction...', timestamp: new Date() }
       ])
 
-      // Simulate signing/submission (replace this with wallet adapter logic)
-      await new Promise((r) => setTimeout(r, 1500))
+      // Build and submit the transaction using the wallet adapter
+      const response = await signAndSubmitTransaction({
+        payload: {
+          function: "0x1::code::publish_package_txn" as const,
+          typeArguments: [],
+          functionArguments: [metadataBytes, moduleBytecodes],
+        },
+      })
+
+      // Extract transaction hash from response
+      const txHash = (response as any)?.hash || (response as any)?.args?.hash || JSON.stringify(response)
+
       setConsoleOutput((prev) => [
         ...prev,
-        { type: 'success', message: 'Simulated submission successful. (Integrate Wallet Adapter to perform real submit)', timestamp: new Date() }
+        { type: 'success', message: `Module deployed successfully!`, timestamp: new Date() },
+        { type: 'info', message: `Transaction hash: ${txHash}`, timestamp: new Date() },
+        { type: 'info', message: `View on explorer: https://explorer.movementnetwork.xyz/txn/${txHash}?network=testnet`, timestamp: new Date() }
       ])
     } catch (err: any) {
       setConsoleOutput((prev) => [
@@ -221,34 +228,9 @@ export default function Home() {
     setConsoleOutput([])
   }
 
-  const handleConnectWallet = () => {
-    if (!isConnected) {
-      // prompt user for wallet address (or integrate real wallet later)
-      const addr = window.prompt("Enter wallet address (0x...) or paste from wallet:")
-      if (addr && addr.length > 0) {
-        setWalletAddress(addr)
-        setIsConnected(true)
-        setConsoleOutput((prev) => [
-          ...prev,
-          {
-            type: "success",
-            message: `Wallet connected: ${addr}`,
-            timestamp: new Date(),
-          },
-        ])
-      } else {
-        setConsoleOutput((prev) => [
-          ...prev,
-          {
-            type: "error",
-            message: "No wallet address provided.",
-            timestamp: new Date(),
-          },
-        ])
-      }
-    } else {
-      setIsConnected(false)
-      setWalletAddress(null)
+  const handleDisconnectWallet = async () => {
+    try {
+      await disconnect()
       setConsoleOutput((prev) => [
         ...prev,
         {
@@ -257,12 +239,21 @@ export default function Home() {
           timestamp: new Date(),
         },
       ])
+    } catch (err: any) {
+      setConsoleOutput((prev) => [
+        ...prev,
+        {
+          type: "error",
+          message: err?.message || String(err),
+          timestamp: new Date(),
+        },
+      ])
     }
   }
 
   return (
     <div className="flex flex-col h-screen">
-      <Header isConnected={isConnected} onConnectWallet={handleConnectWallet} walletAddress={walletAddress} />
+      <Header isConnected={isConnected} onDisconnect={handleDisconnectWallet} walletAddress={walletAddress} />
 
 
       <Toolbar
