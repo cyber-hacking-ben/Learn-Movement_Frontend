@@ -77,7 +77,7 @@ export function Header({ isConnected, onDisconnect, walletAddress }: HeaderProps
             </Button>
           ) : (
             <div className="flex items-center justify-center bg-yellow-400 rounded-full w-50 h-8">
-            <ConnectButton />
+              <ConnectButton>Connect Wallet</ConnectButton>
             </div>
           )}
         </div>
